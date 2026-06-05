@@ -1,0 +1,342 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Create Account</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link href="https://fonts.googleapis.com/css2?family=DM+Sans:wght@400;500&family=DM+Serif+Display&display=swap" rel="stylesheet" />
+  <style>
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+    :root {
+      --bg: #f5f3ef;
+      --surface: #ffffff;
+      --border: #e2ddd6;
+      --text: #1a1714;
+      --muted: #7a746c;
+      --hint: #b0a99f;
+      --accent: #2e5bff;
+      --accent-light: #eef1ff;
+      --success: #1e8f5e;
+      --danger: #c0392b;
+      --danger-bg: #fff5f5;
+      --radius: 14px;
+      --input-h: 46px;
+    }
+
+    body {
+      font-family: 'DM Sans', sans-serif;
+      background: var(--bg);
+      min-height: 100vh;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      padding: 2rem 1rem;
+    }
+
+    .card {
+      background: var(--surface);
+      border: 1px solid var(--border);
+      border-radius: 20px;
+      padding: 2.5rem 2.25rem;
+      width: 100%;
+      max-width: 460px;
+      box-shadow: 0 4px 40px rgba(0,0,0,0.06);
+    }
+
+    .brand {
+      font-family: 'DM Serif Display', serif;
+      font-size: 13px;
+      letter-spacing: 0.08em;
+      color: var(--accent);
+      text-transform: uppercase;
+      margin-bottom: 1.5rem;
+    }
+
+    h1 {
+      font-family: 'DM Serif Display', serif;
+      font-size: 28px;
+      font-weight: 400;
+      color: var(--text);
+      margin-bottom: 0.3rem;
+      line-height: 1.2;
+    }
+
+    .subtitle {
+      font-size: 14px;
+      color: var(--muted);
+      margin-bottom: 2rem;
+    }
+
+    .row { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; }
+
+    .field { margin-bottom: 1rem; }
+
+    .field label {
+      display: block;
+      font-size: 12.5px;
+      font-weight: 500;
+      color: var(--muted);
+      letter-spacing: 0.03em;
+      margin-bottom: 6px;
+      text-transform: uppercase;
+    }
+
+    .field input,
+    .field select {
+      width: 100%;
+      height: var(--input-h);
+      padding: 0 14px;
+      font-family: 'DM Sans', sans-serif;
+      font-size: 15px;
+      color: var(--text);
+      background: var(--bg);
+      border: 1.5px solid var(--border);
+      border-radius: 10px;
+      outline: none;
+      transition: border-color 0.15s, background 0.15s;
+      appearance: none;
+    }
+
+    .field input:focus,
+    .field select:focus {
+      border-color: var(--accent);
+      background: var(--surface);
+    }
+
+    .field.invalid input,
+    .field.invalid select { border-color: var(--danger); background: var(--danger-bg); }
+    .field.valid input { border-color: var(--success); }
+
+    .field .error {
+      display: none;
+      font-size: 12px;
+      color: var(--danger);
+      margin-top: 5px;
+    }
+    .field.invalid .error { display: block; }
+
+    .pwd-wrap { position: relative; }
+    .pwd-wrap input { padding-right: 44px; }
+    .pwd-toggle {
+      position: absolute; right: 12px; top: 50%; transform: translateY(-50%);
+      background: none; border: none; cursor: pointer; color: var(--hint);
+      font-size: 18px; line-height: 1; padding: 0; display: flex;
+    }
+
+    .strength-bar {
+      height: 3px; border-radius: 2px; margin-top: 7px;
+      background: var(--border); overflow: hidden;
+    }
+    .strength-fill {
+      height: 100%; border-radius: 2px;
+      transition: width 0.3s ease, background 0.3s ease;
+      width: 0%;
+    }
+    .strength-label {
+      font-size: 11px; color: var(--hint); margin-top: 4px;
+      min-height: 16px;
+    }
+
+    .divider {
+      border: none; border-top: 1px solid var(--border);
+      margin: 1.5rem 0;
+    }
+
+    .check-row {
+      display: flex; align-items: flex-start; gap: 10px;
+      font-size: 13px; color: var(--muted); margin-bottom: 1.25rem;
+      line-height: 1.5;
+    }
+    .check-row input[type=checkbox] {
+      width: 16px; height: 16px; margin-top: 2px; flex-shrink: 0;
+      accent-color: var(--accent);
+    }
+    .check-row a { color: var(--accent); text-decoration: none; }
+    .check-row a:hover { text-decoration: underline; }
+
+    .submit-btn {
+      width: 100%; height: 50px;
+      font-family: 'DM Sans', sans-serif;
+      font-size: 15px; font-weight: 500;
+      color: #fff;
+      background: var(--accent);
+      border: none; border-radius: 10px;
+      cursor: pointer; transition: opacity 0.15s, transform 0.1s;
+      letter-spacing: 0.01em;
+    }
+    .submit-btn:hover { opacity: 0.9; }
+    .submit-btn:active { transform: scale(0.98); }
+
+    .login-link {
+      text-align: center; font-size: 13px; color: var(--muted); margin-top: 1.1rem;
+    }
+    .login-link a { color: var(--accent); text-decoration: none; font-weight: 500; }
+
+    /* Success state */
+    .success-msg {
+      display: none; text-align: center; padding: 2rem 0;
+    }
+    .success-icon {
+      width: 64px; height: 64px; border-radius: 50%;
+      background: #e6f7f0;
+      display: flex; align-items: center; justify-content: center;
+      margin: 0 auto 1.25rem;
+      font-size: 28px; color: var(--success);
+    }
+    .success-msg h2 {
+      font-family: 'DM Serif Display', serif;
+      font-size: 22px; font-weight: 400; margin-bottom: 0.4rem;
+    }
+    .success-msg p { font-size: 14px; color: var(--muted); }
+
+    /* Select arrow */
+    .select-wrap { position: relative; }
+    .select-wrap::after {
+      content: '▾';
+      position: absolute; right: 14px; top: 50%; transform: translateY(-50%);
+      pointer-events: none; color: var(--hint); font-size: 14px;
+    }
+    .select-wrap select { padding-right: 36px; }
+  </style>
+</head>
+<body>
+
+<div class="card">
+  <div id="form-content">
+    <p class="brand">Acme Inc.</p>
+    <h1>Create your account</h1>
+    <p class="subtitle">Start your free 14-day trial — no credit card required.</p>
+
+    <div class="row">
+      <div class="field" id="f-first">
+        <label for="first">First name</label>
+        <input type="text" id="first" placeholder="Jane" autocomplete="given-name" />
+        <span class="error">Required.</span>
+      </div>
+      <div class="field" id="f-last">
+        <label for="last">Last name</label>
+        <input type="text" id="last" placeholder="Doe" autocomplete="family-name" />
+        <span class="error">Required.</span>
+      </div>
+    </div>
+
+    <div class="field" id="f-email">
+      <label for="email">Email address</label>
+      <input type="email" id="email" placeholder="jane@example.com" autocomplete="email" />
+      <span class="error">Enter a valid email address.</span>
+    </div>
+
+    <div class="field" id="f-role">
+      <label for="role">Role</label>
+      <div class="select-wrap">
+        <select id="role">
+          <option value="">Select your role…</option>
+          <option>Developer</option>
+          <option>Designer</option>
+          <option>Product manager</option>
+          <option>Marketing</option>
+          <option>Other</option>
+        </select>
+      </div>
+      <span class="error">Please select a role.</span>
+    </div>
+
+    <div class="field" id="f-pwd">
+      <label for="pwd">Password</label>
+      <div class="pwd-wrap">
+        <input type="password" id="pwd" placeholder="Min. 8 characters" autocomplete="new-password" />
+        <button type="button" class="pwd-toggle" id="toggle-pwd" aria-label="Show password">&#128065;</button>
+      </div>
+      <div class="strength-bar"><div class="strength-fill" id="strength-fill"></div></div>
+      <div class="strength-label" id="strength-label"></div>
+      <span class="error">Must be at least 8 characters.</span>
+    </div>
+
+    <div class="field" id="f-confirm">
+      <label for="confirm">Confirm password</label>
+      <input type="password" id="confirm" placeholder="Repeat password" autocomplete="new-password" />
+      <span class="error">Passwords do not match.</span>
+    </div>
+
+    <hr class="divider" />
+
+    <div class="check-row">
+      <input type="checkbox" id="terms" />
+      <label for="terms">I agree to the <a href="#">Terms of Service</a> and <a href="#">Privacy Policy</a>.</label>
+    </div>
+
+    <button class="submit-btn" onclick="handleSubmit()">Create account →</button>
+    <p class="login-link">Already have an account? <a href="#">Sign in</a></p>
+  </div>
+
+  <div class="success-msg" id="success-msg">
+    <div class="success-icon">✓</div>
+    <h2>You're all set!</h2>
+    <p>Check your inbox to verify your email address<br>and activate your account.</p>
+  </div>
+</div>
+
+<script>
+  const toggleBtn = document.getElementById('toggle-pwd');
+  const pwdInput = document.getElementById('pwd');
+
+  toggleBtn.addEventListener('click', () => {
+    const show = pwdInput.type === 'password';
+    pwdInput.type = show ? 'text' : 'password';
+    toggleBtn.innerHTML = show ? '&#128064;' : '&#128065;';
+    toggleBtn.setAttribute('aria-label', show ? 'Hide password' : 'Show password');
+  });
+
+  pwdInput.addEventListener('input', () => {
+    const v = pwdInput.value;
+    let score = 0;
+    if (v.length >= 8) score++;
+    if (/[A-Z]/.test(v)) score++;
+    if (/[0-9]/.test(v)) score++;
+    if (/[^A-Za-z0-9]/.test(v)) score++;
+    const colors = ['#c0392b', '#e67e22', '#27ae60', '#1e8f5e'];
+    const labels = ['Weak', 'Fair', 'Good', 'Strong'];
+    const fill = document.getElementById('strength-fill');
+    const lbl = document.getElementById('strength-label');
+    if (!v) { fill.style.width = '0%'; lbl.textContent = ''; return; }
+    fill.style.width = (score * 25) + '%';
+    fill.style.background = colors[score - 1] || colors[0];
+    lbl.textContent = 'Strength: ' + (labels[score - 1] || labels[0]);
+  });
+
+  function validate(id, check) {
+    const field = document.getElementById('f-' + id);
+    field.classList.toggle('invalid', !check);
+    field.classList.toggle('valid', check);
+    return check;
+  }
+
+  function handleSubmit() {
+    const first = document.getElementById('first').value.trim();
+    const last = document.getElementById('last').value.trim();
+    const email = document.getElementById('email').value.trim();
+    const role = document.getElementById('role').value;
+    const pwd = document.getElementById('pwd').value;
+    const confirm = document.getElementById('confirm').value;
+    const terms = document.getElementById('terms').checked;
+    const emailRe = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+
+    let ok = true;
+    ok = validate('first', first.length > 0) && ok;
+    ok = validate('last', last.length > 0) && ok;
+    ok = validate('email', emailRe.test(email)) && ok;
+    ok = validate('role', role !== '') && ok;
+    ok = validate('pwd', pwd.length >= 8) && ok;
+    ok = validate('confirm', confirm === pwd && confirm.length > 0) && ok;
+
+    if (!terms) { alert('Please accept the terms to continue.'); ok = false; }
+    if (!ok) return;
+
+    document.getElementById('form-content').style.display = 'none';
+    document.getElementById('success-msg').style.display = 'block';
+  }
+</script>
+</body>
+</html>
