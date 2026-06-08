@@ -3,7 +3,9 @@ name: PR Agent
 on:
   pull_request:
     types: [opened, synchronize, reopened]
-
+env:
+  FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: true
+  
 jobs:
   pr-summary:
     runs-on: ubuntu-latest
