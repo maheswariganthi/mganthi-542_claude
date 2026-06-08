@@ -97,14 +97,13 @@ jobs:
             }
 
             // Find test and code files
-            const { execSync: exec } = require('child_process');
             let testFiles = [];
             let codeFiles = [];
             try {
-              testFiles = exec('find testcase -type f -name "*.test.*" -o -name "*.spec.*" 2>/dev/null || true', { encoding: 'utf-8' }).trim().split('\n').filter(Boolean);
+              testFiles = execSync('find testcase -type f -name "*.test.*" -o -name "*.spec.*" 2>/dev/null || true', { encoding: 'utf-8' }).trim().split('\n').filter(Boolean);
             } catch(e) {}
             try {
-              codeFiles = exec('find coderep -type f \\( -name "*.js" -o -name "*.jsx" -o -name "*.ts" -o -name "*.tsx" \\) 2>/dev/null || true', { encoding: 'utf-8' }).trim().split('\n').filter(Boolean);
+              codeFiles = execSync('find coderep -type f \\( -name "*.js" -o -name "*.jsx" -o -name "*.ts" -o -name "*.tsx" \\) 2>/dev/null || true', { encoding: 'utf-8' }).trim().split('\n').filter(Boolean);
             } catch(e) {}
 
             // Write temp data for Python script
