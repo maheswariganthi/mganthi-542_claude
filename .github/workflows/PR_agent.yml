@@ -2,23 +2,70 @@ name: PR Agent
 
 on:
   pull_request:
-    types: [opened]
+    types: [opened, synchronize, reopened]
 
 jobs:
-  agent-comment:
+  pr-summary:
     runs-on: ubuntu-latest
     permissions:
       pull-requests: write
+      contents: read
 
     steps:
-      - name: Post agent success comment
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+
+      - name: Install dependencies
+        run: pip install -r requirements.txt
+
+      - name: Generate PR summary and post comment
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         uses: actions/github-script@v7
         with:
           github-token: ${{ secrets.GITHUB_TOKEN }}
           script: |
+            const { execSync } = require('child_process');
+
+            const prNumber = context.payload.pull_request.number;
+            const owner = context.repo.owner;
+            const repo = context.repo.repo;
+
+            // Run the agent's summary logic via a Python script
+            const result = execSync(
+              `python -c "
+            import asyncio, json, os
+            os.environ['GITHUB_TOKEN'] = '${process.env.GITHUB_TOKEN}'
+            os.environ['GITHUB_OWNER'] = '${owner}'
+            os.environ['GITHUB_REPO'] = '${repo}'
+
+            from app.github_client import GitHubClient
+            from app.report import generate_summary
+
+            async def main():
+                client = GitHubClient()
+                pr_details = await client.get_pr_details('${owner}', '${repo}', ${prNumber})
+                pr_files = await client.get_pr_files('${owner}', '${repo}', ${prNumber})
+                summary = generate_summary(pr_details, pr_files)
+                print(json.dumps({'summary': summary, 'title': pr_details['title'], 'author': pr_details['user']['login']}))
+
+            asyncio.run(main())
+            "`,
+              { encoding: 'utf-8' }
+            );
+
+            const data = JSON.parse(result.trim());
+
+            const comment = `## 📋 PR Summary\n\n**${data.title}** by @${data.author}\n\n${data.summary}`;
+
             await github.rest.issues.createComment({
-              owner: context.repo.owner,
-              repo: context.repo.repo,
-              issue_number: context.payload.pull_request.number,
-              body: 'Agent has executed successfully'
+              owner,
+              repo,
+              issue_number: prNumber,
+              body: comment
             });
