@@ -106,9 +106,24 @@ jobs:
               codeFiles = execSync('find coderep -type f \\( -name "*.js" -o -name "*.jsx" -o -name "*.ts" -o -name "*.tsx" \\) 2>/dev/null || true', { encoding: 'utf-8' }).trim().split('\n').filter(Boolean);
             } catch(e) {}
 
+            // Read file contents for analysis
+            const testContents = {};
+            for (const f of testFiles) {
+              try { testContents[f] = fs.readFileSync(f, 'utf-8'); } catch(e) {}
+            }
+            const codeContents = {};
+            for (const f of codeFiles) {
+              try { codeContents[f] = fs.readFileSync(f, 'utf-8'); } catch(e) {}
+            }
+
             // Write temp data for Python script
             fs.writeFileSync('/tmp/jest_results.json', jestJson);
-            fs.writeFileSync('/tmp/file_lists.json', JSON.stringify({ test_files: testFiles, code_files: codeFiles }));
+            fs.writeFileSync('/tmp/file_lists.json', JSON.stringify({
+              test_files: testFiles,
+              code_files: codeFiles,
+              test_contents: testContents,
+              code_contents: codeContents
+            }));
 
             // Run Python report generator
             const report = execSync(
@@ -124,7 +139,12 @@ jobs:
                 files = json.load(f)
 
             jest_results = parse_jest_results(jest_raw)
-            missing = find_missing_coverage(files['test_files'], files['code_files'])
+            missing = find_missing_coverage(
+                files['test_files'],
+                files['code_files'],
+                test_contents=files.get('test_contents', {}),
+                code_contents=files.get('code_contents', {})
+            )
             report = generate_test_report(jest_results, missing)
             print(report)
             "`,
