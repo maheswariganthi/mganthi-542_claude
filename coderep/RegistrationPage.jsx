@@ -232,7 +232,6 @@ export const validate = (fields) => {
   } else if (fields.password !== fields.confirmPassword) {
     errors.confirmPassword = "Passwords do not match";
   }
-  if (!fields.agreed) errors.agreed = "You must accept the terms";
   return errors;
 };
 
@@ -403,20 +402,6 @@ export default function RegistrationPage() {
                     <p className="rp-err-msg" data-testid="error-confirmPassword">{errors.confirmPassword}</p>
                   )}
                 </div>
-
-                <div className="rp-terms-row">
-                  <input type="checkbox" id="agreed" data-testid="checkbox-agreed"
-                    className="rp-checkbox" checked={fields.agreed}
-                    onChange={e => set("agreed", e.target.checked)} />
-                  <label htmlFor="agreed" className="rp-terms-label">
-                    I agree to the <a href="#terms">Terms of Service</a> and{" "}
-                    <a href="#privacy">Privacy Policy</a>
-                  </label>
-                </div>
-                {errors.agreed && (
-                  <p className="rp-err-msg" style={{ marginBottom: 16 }}
-                    data-testid="error-agreed">{errors.agreed}</p>
-                )}
 
                 <button type="submit" className="rp-btn"
                   data-testid="submit-btn" disabled={loading}>
