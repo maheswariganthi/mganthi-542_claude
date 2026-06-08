@@ -233,31 +233,22 @@ def generate_test_report(jest_results: dict, missing_coverage: list[dict]) -> st
                 for exp in m["untested_exports"]:
                     parts.append(f"- `{exp['name']}` ({exp['kind']})")
 
-        # --- Suggested Missing Test Cases ---
-        parts.append("### :memo: Suggested Missing Test Cases")
-        parts.append(
-            "The following test cases should be added to improve coverage:\n"
-        )
-        parts.append("| # | Code File | Export | Type | Suggested Test |")
-        parts.append("|---|-----------|--------|------|---------------|")
-        count = 0
+        # --- Missing Test Cases (based on committed code only) ---
+        all_untested = []
         for m in missing_coverage:
             for exp in m.get("untested_exports", []):
-                count += 1
-                if exp["kind"] == "component":
-                    suggestion = f"renders `{exp['name']}` without crashing"
-                elif exp["kind"] == "hook":
-                    suggestion = f"calls `{exp['name']}` and validates return value"
-                else:
-                    suggestion = f"calls `{exp['name']}` with valid args and checks output"
-                parts.append(
-                    f"| {count} | `{m['file']}` | `{exp['name']}` | {exp['kind']} | {suggestion} |"
-                )
+                all_untested.append({"file": m["file"], "export": exp})
 
-        if count == 0:
-            parts.pop()  # remove table header
-            parts.pop()
-            parts.pop()
-            parts.pop()
+        if all_untested:
+            parts.append("### :memo: Missing Test Cases")
+            parts.append(
+                "The following exports in `coderep/` are **not covered** by any test in `testcase/`:\n"
+            )
+            parts.append("| # | Code File | Export | Type |")
+            parts.append("|---|-----------|--------|------|")
+            for i, item in enumerate(all_untested, 1):
+                parts.append(
+                    f"| {i} | `{item['file']}` | `{item['export']['name']}` | {item['export']['kind']} |"
+                )
 
     return "\n\n".join(parts)
