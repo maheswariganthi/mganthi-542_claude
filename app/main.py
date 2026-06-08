@@ -1,0 +1,142 @@
+name: PR Test Validation Agent
+
+on:
+  pull_request:
+    types: [opened, synchronize, reopened]
+
+env:
+  FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: true
+
+jobs:
+  test-validation:
+    runs-on: ubuntu-latest
+    permissions:
+      pull-requests: write
+      contents: read
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+
+      - name: Install Jest and React testing dependencies
+        run: |
+          npm init -y
+          npm install --save-dev jest @testing-library/react @testing-library/jest-dom @testing-library/user-event jest-environment-jsdom @babel/preset-env @babel/preset-react babel-jest react react-dom
+
+      - name: Configure Jest
+        run: |
+          cat > jest.config.js << 'EOF'
+          module.exports = {
+            testEnvironment: 'jsdom',
+            roots: ['<rootDir>/testcase'],
+            moduleDirectories: ['node_modules', 'coderep'],
+            moduleNameMapper: {
+              '\\.(css|less|scss|sass)$': '<rootDir>/__mocks__/styleMock.js',
+              '\\.(jpg|jpeg|png|gif|svg)$': '<rootDir>/__mocks__/fileMock.js'
+            },
+            transform: {
+              '^.+\\.(js|jsx|ts|tsx)$': 'babel-jest'
+            },
+            transformIgnorePatterns: ['/node_modules/'],
+            testMatch: ['**/testcase/**/*.{test,spec}.{js,jsx,ts,tsx}']
+          };
+          EOF
+
+          cat > babel.config.js << 'EOF'
+          module.exports = {
+            presets: [
+              ['@babel/preset-env', { targets: { node: 'current' } }],
+              ['@babel/preset-react', { runtime: 'automatic' }]
+            ]
+          };
+          EOF
+
+          mkdir -p __mocks__
+          echo "module.exports = {};" > __mocks__/styleMock.js
+          echo "module.exports = 'test-file-stub';" > __mocks__/fileMock.js
+
+      - name: Run Jest tests
+        id: jest
+        continue-on-error: true
+        run: |
+          npx jest --json --outputFile=jest-results.json --forceExit 2>&1 | tee jest-output.log || true
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+
+      - name: Install Python dependencies
+        run: pip install -r app/requirements.txt
+
+      - name: Generate report and post comment
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        uses: actions/github-script@v7
+        with:
+          github-token: ${{ secrets.GITHUB_TOKEN }}
+          script: |
+            const { execSync } = require('child_process');
+            const fs = require('fs');
+
+            const prNumber = context.payload.pull_request.number;
+            const owner = context.repo.owner;
+            const repo = context.repo.repo;
+
+            // Read jest results
+            let jestJson = '{}';
+            try {
+              jestJson = fs.readFileSync('jest-results.json', 'utf-8');
+            } catch (e) {
+              jestJson = JSON.stringify({ error: "Jest did not produce results", numTotalTests: 0, numPassedTests: 0, numFailedTests: 0, testResults: [] });
+            }
+
+            // Find test and code files
+            const { execSync: exec } = require('child_process');
+            let testFiles = [];
+            let codeFiles = [];
+            try {
+              testFiles = exec('find testcase -type f -name "*.test.*" -o -name "*.spec.*" 2>/dev/null || true', { encoding: 'utf-8' }).trim().split('\n').filter(Boolean);
+            } catch(e) {}
+            try {
+              codeFiles = exec('find coderep -type f \\( -name "*.js" -o -name "*.jsx" -o -name "*.ts" -o -name "*.tsx" \\) 2>/dev/null || true', { encoding: 'utf-8' }).trim().split('\n').filter(Boolean);
+            } catch(e) {}
+
+            // Write temp data for Python script
+            fs.writeFileSync('/tmp/jest_results.json', jestJson);
+            fs.writeFileSync('/tmp/file_lists.json', JSON.stringify({ test_files: testFiles, code_files: codeFiles }));
+
+            // Run Python report generator
+            const report = execSync(
+              `python -c "
+            import json, sys
+            sys.path.insert(0, '.')
+            from app.report import parse_jest_results, find_missing_coverage, generate_test_report
+
+            with open('/tmp/jest_results.json') as f:
+                jest_raw = f.read()
+
+            with open('/tmp/file_lists.json') as f:
+                files = json.load(f)
+
+            jest_results = parse_jest_results(jest_raw)
+            missing = find_missing_coverage(files['test_files'], files['code_files'])
+            report = generate_test_report(jest_results, missing)
+            print(report)
+            "`,
+              { encoding: 'utf-8' }
+            );
+
+            const comment = `## 🧪 PR Test Validation Report\n\n${report}\n\n---\n_Generated by PR Test Validation Agent_`;
+
+            await github.rest.issues.createComment({
+              owner,
+              repo,
+              issue_number: prNumber,
+              body: comment
+            });
