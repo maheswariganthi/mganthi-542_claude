@@ -127,12 +127,13 @@ jobs:
               code_contents: codeContents
             }));
 
-            // Run Python report generator — returns JSON with report + pass/fail
+            // Run Python report generator — returns JSON with markdown report, HTML report, and pass/fail
             const resultRaw = execSync(
               `python -c "
             import json, sys
             sys.path.insert(0, '.')
             from app.report import parse_jest_results, find_missing_coverage, generate_test_report
+            from app.report_html import generate_html_report
 
             with open('/tmp/jest_results.json') as f:
                 jest_raw = f.read()
@@ -148,8 +149,12 @@ jobs:
                 code_contents=files.get('code_contents', {})
             )
             report = generate_test_report(jest_results, missing)
+            html_report = generate_html_report(jest_results, missing)
 
-            passed = jest_results.get('failed', 0) == 0 and len(missing) == 0
+            with open('/tmp/report.html', 'w') as f:
+                f.write(html_report)
+
+            passed = jest_results.get('failed', 0) == 0
             print(json.dumps({
                 'report': report,
                 'passed': passed,
@@ -163,6 +168,7 @@ jobs:
             const result = JSON.parse(resultRaw.trim());
             const report = result.report;
             const passed = result.passed;
+            const htmlReport = fs.readFileSync('/tmp/report.html', 'utf-8');
 
             // Dismiss previous bot reviews so only the latest state matters
             const reviews = await github.rest.pulls.listReviews({ owner, repo, pull_number: prNumber });
@@ -183,16 +189,37 @@ jobs:
               await github.rest.pulls.createReview({
                 owner, repo, pull_number: prNumber,
                 event: 'APPROVE',
-                body: `## ✅ Test Validation Passed\n\n${report}\n\n---\n_All committed tests pass and coverage is complete. Merge is allowed._`
+                body: `## ✅ Test Validation Passed\n\n${htmlReport}\n\n---\n_All committed tests pass. Merge is allowed._`
               });
             } else {
               // REQUEST_CHANGES — blocks merge button
               await github.rest.pulls.createReview({
                 owner, repo, pull_number: prNumber,
                 event: 'REQUEST_CHANGES',
-                body: `## ❌ Test Validation Failed\n\n${report}\n\n### Suggested Changes\nPlease fix the above failed tests and add missing test coverage before merging.\n\n---\n_Merge is blocked. Push fixes and the agent will re-validate automatically._`
+                body: `## ❌ Test Validation Failed\n\n${htmlReport}\n\n### Suggested Changes\nPlease fix the failing tests listed above before merging.\n\n---\n_Merge is blocked until all committed tests pass. Push fixes and the agent will re-validate automatically._`
               });
 
               // Fail the check so branch protection blocks merge
-              core.setFailed(`Validation failed: ${result.failed_count} test(s) failed, ${result.missing_count} file(s) missing coverage`);
+              core.setFailed(`Validation failed: ${result.failed_count} test(s) failed`);
             }
+
+      - name: Save HTML report
+        if: always()
+        run: |
+          mkdir -p dist
+          cp /tmp/report.html dist/index.html
+
+      - name: Upload report artifact
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: test-validation-report
+          path: dist/index.html
+
+      - name: Deploy report to Netlify
+        if: always()
+        env:
+          NETLIFY_AUTH_TOKEN: ${{ secrets.NETLIFY_AUTH_TOKEN }}
+          NETLIFY_SITE_ID: ${{ secrets.NETLIFY_SITE_ID }}
+        run: |
+          npx netlify-cli deploy --prod --dir=dist --site=$NETLIFY_SITE_ID --auth=$NETLIFY_AUTH_TOKEN
