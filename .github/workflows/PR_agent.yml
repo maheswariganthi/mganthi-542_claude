@@ -120,8 +120,8 @@ jobs:
           missing = find_missing_coverage(test_files, code_files, test_contents=test_contents, code_contents=code_contents)
           html_report = generate_html_report(jest_results, missing)
 
+          os.makedirs('dist', exist_ok=True)
           with open('dist/index.html', 'w') as f:
-              os.makedirs('dist', exist_ok=True)
               f.write(html_report)
 
           passed = jest_results.get('failed', 0) == 0
