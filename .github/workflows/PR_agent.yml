@@ -13,7 +13,6 @@ jobs:
     permissions:
       pull-requests: write
       contents: read
-      checks: write
 
     steps:
       - name: Checkout repository
@@ -75,139 +74,115 @@ jobs:
       - name: Install Python dependencies
         run: pip install -r requirements.txt
 
-      - name: Validate and report
+      - name: Generate validation report
         id: validate
+        run: |
+          python -c "
+          import json, sys
+          sys.path.insert(0, '.')
+          from app.report import parse_jest_results, find_missing_coverage, generate_test_report
+          from app.report_html import generate_html_report
+          import subprocess
+
+          # Read jest results
+          try:
+              with open('jest-results.json') as f:
+                  jest_raw = f.read()
+          except FileNotFoundError:
+              jest_raw = json.dumps({'numTotalTests': 0, 'numPassedTests': 0, 'numFailedTests': 0, 'testResults': []})
+
+          # Find test and code files
+          import os, re
+          test_files = []
+          code_files = []
+          for root, dirs, files in os.walk('testcase'):
+              for f in files:
+                  if re.search(r'\.(test|spec)\.(js|jsx|ts|tsx)$', f):
+                      test_files.append(os.path.join(root, f))
+          for root, dirs, files in os.walk('coderep'):
+              for f in files:
+                  if re.search(r'\.(js|jsx|ts|tsx)$', f):
+                      code_files.append(os.path.join(root, f))
+
+          # Read file contents
+          test_contents = {}
+          for f in test_files:
+              try:
+                  with open(f) as fh: test_contents[f] = fh.read()
+              except: pass
+          code_contents = {}
+          for f in code_files:
+              try:
+                  with open(f) as fh: code_contents[f] = fh.read()
+              except: pass
+
+          jest_results = parse_jest_results(jest_raw)
+          missing = find_missing_coverage(test_files, code_files, test_contents=test_contents, code_contents=code_contents)
+          html_report = generate_html_report(jest_results, missing)
+
+          with open('dist/index.html', 'w') as f:
+              os.makedirs('dist', exist_ok=True)
+              f.write(html_report)
+
+          passed = jest_results.get('failed', 0) == 0
+          result = {'passed': passed, 'failed_count': jest_results.get('failed', 0), 'missing_count': len(missing)}
+          with open('/tmp/validation_result.json', 'w') as f:
+              json.dump(result, f)
+
+          # Set output for later steps
+          with open(os.environ['GITHUB_OUTPUT'], 'a') as fh:
+              fh.write(f\"passed={'true' if passed else 'false'}\n\")
+              fh.write(f\"failed_count={result['failed_count']}\n\")
+              fh.write(f\"missing_count={result['missing_count']}\n\")
+          "
+
+      - name: Deploy report to Netlify
+        id: deploy
+        if: always()
         env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          NETLIFY_AUTH_TOKEN: ${{ secrets.NETLIFY_AUTH_TOKEN }}
+          NETLIFY_SITE_ID: ${{ secrets.NETLIFY_SITE_ID }}
+        run: |
+          mkdir -p dist
+          DEPLOY_OUTPUT=$(npx netlify-cli deploy --prod --dir=dist --site=$NETLIFY_SITE_ID --auth=$NETLIFY_AUTH_TOKEN 2>&1)
+          echo "$DEPLOY_OUTPUT"
+          DASHBOARD_URL=$(echo "$DEPLOY_OUTPUT" | grep -oP 'Website URL:\s*\K(https://[^\s]+)' || echo "https://${NETLIFY_SITE_ID}.netlify.app")
+          echo "dashboard_url=$DASHBOARD_URL" >> $GITHUB_OUTPUT
+
+      - name: Comment on PR
+        if: always()
         uses: actions/github-script@v7
         with:
           github-token: ${{ secrets.GITHUB_TOKEN }}
           script: |
-            const { execSync } = require('child_process');
-            const fs = require('fs');
-
             const prNumber = context.payload.pull_request.number;
             const owner = context.repo.owner;
             const repo = context.repo.repo;
+            const passed = '${{ steps.validate.outputs.passed }}' === 'true';
+            const failedCount = '${{ steps.validate.outputs.failed_count }}';
+            const missingCount = '${{ steps.validate.outputs.missing_count }}';
+            const dashboardUrl = '${{ steps.deploy.outputs.dashboard_url }}';
 
-            // Read jest results from actual test run
-            let jestJson = '{}';
-            try {
-              jestJson = fs.readFileSync('jest-results.json', 'utf-8');
-            } catch (e) {
-              jestJson = JSON.stringify({ error: "Jest did not produce results", numTotalTests: 0, numPassedTests: 0, numFailedTests: 0, testResults: [] });
-            }
-
-            // Find committed test and code files
-            let testFiles = [];
-            let codeFiles = [];
-            try {
-              testFiles = execSync('find testcase -type f -name "*.test.*" -o -name "*.spec.*" 2>/dev/null || true', { encoding: 'utf-8' }).trim().split('\n').filter(Boolean);
-            } catch(e) {}
-            try {
-              codeFiles = execSync('find coderep -type f \\( -name "*.js" -o -name "*.jsx" -o -name "*.ts" -o -name "*.tsx" \\) 2>/dev/null || true', { encoding: 'utf-8' }).trim().split('\n').filter(Boolean);
-            } catch(e) {}
-
-            // Read actual file contents from the committed repo
-            const testContents = {};
-            for (const f of testFiles) {
-              try { testContents[f] = fs.readFileSync(f, 'utf-8'); } catch(e) {}
-            }
-            const codeContents = {};
-            for (const f of codeFiles) {
-              try { codeContents[f] = fs.readFileSync(f, 'utf-8'); } catch(e) {}
-            }
-
-            // Write temp data for Python script
-            fs.writeFileSync('/tmp/jest_results.json', jestJson);
-            fs.writeFileSync('/tmp/file_lists.json', JSON.stringify({
-              test_files: testFiles,
-              code_files: codeFiles,
-              test_contents: testContents,
-              code_contents: codeContents
-            }));
-
-            // Run Python report generator — returns JSON with markdown report, HTML report, and pass/fail
-            const resultRaw = execSync(
-              `python -c "
-            import json, sys
-            sys.path.insert(0, '.')
-            from app.report import parse_jest_results, find_missing_coverage, generate_test_report
-            from app.report_html import generate_html_report
-
-            with open('/tmp/jest_results.json') as f:
-                jest_raw = f.read()
-
-            with open('/tmp/file_lists.json') as f:
-                files = json.load(f)
-
-            jest_results = parse_jest_results(jest_raw)
-            missing = find_missing_coverage(
-                files['test_files'],
-                files['code_files'],
-                test_contents=files.get('test_contents', {}),
-                code_contents=files.get('code_contents', {})
-            )
-            report = generate_test_report(jest_results, missing)
-            html_report = generate_html_report(jest_results, missing)
-
-            with open('/tmp/report.html', 'w') as f:
-                f.write(html_report)
-
-            passed = jest_results.get('failed', 0) == 0
-            print(json.dumps({
-                'report': report,
-                'passed': passed,
-                'failed_count': jest_results.get('failed', 0),
-                'missing_count': len(missing)
-            }))
-            "`,
-              { encoding: 'utf-8' }
-            );
-
-            const result = JSON.parse(resultRaw.trim());
-            const report = result.report;
-            const passed = result.passed;
-            const htmlReport = fs.readFileSync('/tmp/report.html', 'utf-8');
-
-            // Dismiss previous bot reviews so only the latest state matters
-            const reviews = await github.rest.pulls.listReviews({ owner, repo, pull_number: prNumber });
-            for (const review of reviews.data) {
-              if (review.user.login === 'github-actions[bot]' && review.state !== 'DISMISSED') {
-                try {
-                  await github.rest.pulls.dismissReview({
-                    owner, repo, pull_number: prNumber,
-                    review_id: review.id,
-                    message: 'Superseded by new validation run'
-                  });
-                } catch(e) {}
+            // Delete previous bot comments to keep PR clean
+            const comments = await github.rest.issues.listComments({ owner, repo, issue_number: prNumber });
+            for (const comment of comments.data) {
+              if (comment.user.login === 'github-actions[bot]' && comment.body.includes('Test Validation')) {
+                await github.rest.issues.deleteComment({ owner, repo, comment_id: comment.id });
               }
             }
 
+            let body;
             if (passed) {
-              // APPROVE — enables merge
-              await github.rest.pulls.createReview({
-                owner, repo, pull_number: prNumber,
-                event: 'APPROVE',
-                body: `## ✅ Test Validation Passed\n\n${htmlReport}\n\n---\n_All committed tests pass. Merge is allowed._`
-              });
+              body = `## ✅ Test Validation Passed\n\nAll committed tests pass. Merge is allowed.\n\n📊 [View Full Dashboard](${dashboardUrl})`;
             } else {
-              // REQUEST_CHANGES — blocks merge button
-              await github.rest.pulls.createReview({
-                owner, repo, pull_number: prNumber,
-                event: 'REQUEST_CHANGES',
-                body: `## ❌ Test Validation Failed\n\n${htmlReport}\n\n### Suggested Changes\nPlease fix the failing tests listed above before merging.\n\n---\n_Merge is blocked until all committed tests pass. Push fixes and the agent will re-validate automatically._`
-              });
-
-              // Fail the check so branch protection blocks merge
-              core.setFailed(`Validation failed: ${result.failed_count} test(s) failed`);
+              body = `## ❌ Test Validation Failed\n\n| Metric | Count |\n|--------|-------|\n| Failed Tests | ${failedCount} |\n| Missing Coverage | ${missingCount} |\n\n### 📊 [View Error Details on Dashboard](${dashboardUrl})\n\nPlease fix the failing tests before merging.\n\n---\n_Merge is blocked until all committed tests pass. Push fixes and the agent will re-validate automatically._`;
             }
 
-      - name: Save HTML report
-        if: always()
-        run: |
-          mkdir -p dist
-          cp /tmp/report.html dist/index.html
+            await github.rest.issues.createComment({ owner, repo, issue_number: prNumber, body });
+
+            if (!passed) {
+              core.setFailed(`Validation failed: ${failedCount} test(s) failed`);
+            }
 
       - name: Upload report artifact
         if: always()
@@ -215,11 +190,3 @@ jobs:
         with:
           name: test-validation-report
           path: dist/index.html
-
-      - name: Deploy report to Netlify
-        if: always()
-        env:
-          NETLIFY_AUTH_TOKEN: ${{ secrets.NETLIFY_AUTH_TOKEN }}
-          NETLIFY_SITE_ID: ${{ secrets.NETLIFY_SITE_ID }}
-        run: |
-          npx netlify-cli deploy --prod --dir=dist --site=$NETLIFY_SITE_ID --auth=$NETLIFY_AUTH_TOKEN
