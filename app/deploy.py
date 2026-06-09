@@ -2,9 +2,9 @@
 Deploy the PR Test Validation dashboard to Netlify.
 
 Usage:
-    python deploy.py                   # Generate report + deploy to Netlify
-    python deploy.py --generate-only   # Only generate HTML into dist/
-    python deploy.py --site-id SITE_ID # Override Netlify site ID
+    python -m app.deploy                   # Generate report + deploy to Netlify
+    python -m app.deploy --generate-only   # Only generate HTML into dist/
+    python -m app.deploy --site-id SITE_ID # Override Netlify site ID
 
 Prerequisites:
     - npm install -g netlify-cli
@@ -22,16 +22,17 @@ import subprocess
 import sys
 from pathlib import Path
 
-sys.path.insert(0, str(Path(__file__).parent))
+PROJECT_ROOT = Path(__file__).parent.parent
+sys.path.insert(0, str(PROJECT_ROOT))
 
 from app.report import parse_jest_results, find_missing_coverage
 from app.report_html import generate_html_report
 
 
-DIST_DIR = Path(__file__).parent / "dist"
-TESTCASE_DIR = Path(__file__).parent / "testcase"
-CODEREP_DIR = Path(__file__).parent / "coderep"
-JEST_RESULTS_FILE = Path(__file__).parent / "jest-results.json"
+DIST_DIR = PROJECT_ROOT / "dist"
+TESTCASE_DIR = PROJECT_ROOT / "testcase"
+CODEREP_DIR = PROJECT_ROOT / "coderep"
+JEST_RESULTS_FILE = PROJECT_ROOT / "jest-results.json"
 
 
 def find_files(directory: Path, pattern: str) -> list[str]:
@@ -41,14 +42,14 @@ def find_files(directory: Path, pattern: str) -> list[str]:
         return results
     for f in directory.rglob("*"):
         if f.is_file() and re.search(pattern, f.name):
-            results.append(str(f.relative_to(Path(__file__).parent)))
+            results.append(str(f.relative_to(PROJECT_ROOT)))
     return results
 
 
 def read_file_contents(file_list: list[str]) -> dict[str, str]:
     """Read contents of files into a dict."""
     contents = {}
-    root = Path(__file__).parent
+    root = PROJECT_ROOT
     for f in file_list:
         try:
             contents[f] = (root / f).read_text(encoding="utf-8")
