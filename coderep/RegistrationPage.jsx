@@ -1,472 +1,438 @@
-/**
- * Jest Test Suite — RegistrationPage
- * ───────────────────────────────────
- * Framework : Jest + React Testing Library
- * Renderer  : jsdom
- *
- * ── Setup ──────────────────────────────────────────────────────────────────
- * 1. Install deps
- *    npm install --save-dev jest jest-environment-jsdom \
- *      @testing-library/react @testing-library/jest-dom \
- *      @testing-library/user-event \
- *      babel-jest @babel/core @babel/preset-env @babel/preset-react
- *
- * 2. jest.config.js
- *    module.exports = {
- *      testEnvironment: 'jsdom',
- *      setupFilesAfterFramework: ['<rootDir>/jest.setup.js'],
- *      transform: { '^.+\\.[jt]sx?$': 'babel-jest' },
- *      moduleNameMapper: { '\\.(css|less|scss)$': 'identity-obj-proxy' }
- *    };
- *
- * 3. jest.setup.js
- *    import '@testing-library/jest-dom';
- *
- * 4. babel.config.js
- *    module.exports = {
- *      presets: [
- *        ['@babel/preset-env', { targets: { node: 'current' } }],
- *        ['@babel/preset-react', { runtime: 'automatic' }]
- *      ]
- *    };
- *
- * 5. Run
- *    npx jest RegistrationPage.test.js
- */
+import { useState } from "react";
 
-import React from "react";
-import { render, screen, waitFor } from "@testing-library/react";
-import userEvent from "@testing-library/user-event";
-import "@testing-library/jest-dom";
+/* ─── Styles ─────────────────────────────────────────────────────────────── */
+const styles = `
+  @import url('https://fonts.googleapis.com/css2?family=Cormorant+Garamond:wght@600;700&family=Syne:wght@300;400;500;600&display=swap');
 
-import RegistrationPage, { validate, getStrength } from "./RegistrationPage";
+  *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
 
-// ─── Shared helpers ───────────────────────────────────────────────────────────
+  :root {
+    --bg:        #faf7f2;
+    --surface:   #ffffff;
+    --ink:       #1a1208;
+    --muted:     #8a7f72;
+    --border:    #e5ddd3;
+    --accent:    #c05c2a;
+    --accent-lt: rgba(192,92,42,0.10);
+    --success:   #2a7a4b;
+    --error:     #b53030;
+    --radius:    8px;
+    --shadow:    0 4px 32px rgba(26,18,8,0.08);
+  }
 
-/** Mount the page and return shortcut accessors. */
-const setup = () => {
-  render(<RegistrationPage />);
-  return {
-    firstName:       () => screen.getByTestId("input-firstName"),
-    lastName:        () => screen.getByTestId("input-lastName"),
-    email:           () => screen.getByTestId("input-email"),
-    password:        () => screen.getByTestId("input-password"),
-    confirmPassword: () => screen.getByTestId("input-confirmPassword"),
-    agreed:          () => screen.getByTestId("checkbox-agreed"),
-    submitBtn:       () => screen.getByTestId("submit-btn"),
-  };
+  .rp-root {
+    min-height: 100vh;
+    background: var(--bg);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-family: 'Syne', sans-serif;
+    padding: 24px;
+    position: relative;
+  }
+
+  .rp-root::before {
+    content: '';
+    position: fixed; inset: 0;
+    background-image:
+      linear-gradient(rgba(192,92,42,0.03) 1px, transparent 1px),
+      linear-gradient(90deg, rgba(192,92,42,0.03) 1px, transparent 1px);
+    background-size: 32px 32px;
+    pointer-events: none;
+  }
+
+  .rp-card {
+    position: relative;
+    width: 100%; max-width: 480px;
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: 16px;
+    padding: 52px 48px;
+    box-shadow: var(--shadow);
+    animation: rise 0.55s cubic-bezier(0.22,1,0.36,1) both;
+  }
+
+  @keyframes rise {
+    from { opacity: 0; transform: translateY(28px) scale(0.98); }
+    to   { opacity: 1; transform: translateY(0)    scale(1);    }
+  }
+
+  .rp-card::before {
+    content: '';
+    position: absolute; top: 0; left: 48px; right: 48px; height: 3px;
+    background: var(--accent);
+    border-radius: 0 0 3px 3px;
+  }
+
+  .rp-eyebrow {
+    font-size: 11px; font-weight: 600;
+    letter-spacing: 0.18em; text-transform: uppercase;
+    color: var(--accent);
+    margin-bottom: 10px;
+  }
+
+  .rp-title {
+    font-family: 'Cormorant Garamond', serif;
+    font-size: 38px; font-weight: 700;
+    color: var(--ink); line-height: 1.1;
+    margin-bottom: 6px;
+    letter-spacing: -0.5px;
+  }
+
+  .rp-sub {
+    font-size: 14px; font-weight: 300;
+    color: var(--muted);
+    margin-bottom: 36px;
+  }
+
+  .rp-row {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 16px;
+  }
+
+  .rp-field { margin-bottom: 20px; }
+
+  .rp-label {
+    display: block;
+    font-size: 11.5px; font-weight: 600;
+    text-transform: uppercase; letter-spacing: 0.1em;
+    color: var(--muted);
+    margin-bottom: 7px;
+  }
+
+  .rp-input {
+    width: 100%;
+    padding: 11px 14px;
+    border: 1.5px solid var(--border);
+    border-radius: var(--radius);
+    background: #fdfbf8;
+    font-family: 'Syne', sans-serif;
+    font-size: 15px; color: var(--ink);
+    outline: none;
+    transition: border-color 0.18s, box-shadow 0.18s, background 0.18s;
+  }
+  .rp-input::placeholder { color: #c9bfb4; }
+  .rp-input:focus {
+    border-color: var(--accent);
+    background: #fff;
+    box-shadow: 0 0 0 3px var(--accent-lt);
+  }
+  .rp-input.err { border-color: var(--error); }
+
+  .rp-pw-wrap { position: relative; }
+  .rp-eye {
+    position: absolute; right: 11px; top: 50%; transform: translateY(-50%);
+    background: none; border: none; cursor: pointer;
+    color: var(--muted); padding: 4px; display: flex; align-items: center;
+    transition: color 0.15s;
+  }
+  .rp-eye:hover { color: var(--ink); }
+
+  .rp-strength { margin-top: 7px; display: flex; gap: 4px; }
+  .rp-seg {
+    flex: 1; height: 3px; border-radius: 2px;
+    background: var(--border);
+    transition: background 0.3s;
+  }
+  .rp-seg.active-1 { background: var(--error); }
+  .rp-seg.active-2 { background: #d98c2a; }
+  .rp-seg.active-3 { background: #5ba05b; }
+  .rp-seg.active-4 { background: var(--success); }
+
+  .rp-err-msg {
+    font-size: 12px; color: var(--error);
+    margin-top: 5px; display: flex; align-items: center; gap: 4px;
+  }
+
+  .rp-terms-row {
+    display: flex; align-items: flex-start; gap: 10px;
+    margin-bottom: 26px;
+  }
+  .rp-checkbox {
+    width: 16px; height: 16px;
+    margin-top: 2px; flex-shrink: 0;
+    accent-color: var(--accent); cursor: pointer;
+  }
+  .rp-terms-label {
+    font-size: 13px; font-weight: 300; color: var(--muted); line-height: 1.5;
+  }
+  .rp-terms-label a { color: var(--accent); text-decoration: none; font-weight: 500; }
+  .rp-terms-label a:hover { text-decoration: underline; }
+
+  .rp-btn {
+    width: 100%;
+    padding: 14px;
+    background: var(--accent);
+    color: #fff;
+    border: none; border-radius: var(--radius);
+    font-family: 'Syne', sans-serif;
+    font-size: 14px; font-weight: 600;
+    letter-spacing: 0.08em; text-transform: uppercase;
+    cursor: pointer;
+    display: flex; align-items: center; justify-content: center; gap: 8px;
+    transition: background 0.18s, transform 0.12s, opacity 0.18s;
+  }
+  .rp-btn:hover:not(:disabled) { background: #a84c20; transform: translateY(-1px); }
+  .rp-btn:active:not(:disabled) { transform: translateY(0); }
+  .rp-btn:disabled { opacity: 0.55; cursor: not-allowed; }
+
+  .rp-footer {
+    text-align: center; margin-top: 24px;
+    font-size: 13.5px; font-weight: 300; color: var(--muted);
+  }
+  .rp-footer a { color: var(--accent); font-weight: 500; text-decoration: none; }
+  .rp-footer a:hover { text-decoration: underline; }
+
+  .rp-success {
+    text-align: center; padding: 16px 0;
+    animation: rise 0.45s cubic-bezier(0.22,1,0.36,1) both;
+  }
+  .rp-success-icon {
+    width: 68px; height: 68px; border-radius: 50%;
+    background: rgba(42,122,75,0.10);
+    margin: 0 auto 22px;
+    display: flex; align-items: center; justify-content: center;
+  }
+  .rp-success-title {
+    font-family: 'Cormorant Garamond', serif;
+    font-size: 30px; font-weight: 700; color: var(--ink);
+    margin-bottom: 8px;
+  }
+  .rp-success-body { font-size: 14px; font-weight: 300; color: var(--muted); }
+  .rp-success-body strong { color: var(--ink); font-weight: 500; }
+
+  .spinner {
+    width: 17px; height: 17px;
+    border: 2px solid rgba(255,255,255,0.35);
+    border-top-color: #fff;
+    border-radius: 50%;
+    animation: spin 0.65s linear infinite;
+  }
+  @keyframes spin { to { transform: rotate(360deg); } }
+`;
+
+/* ─── Exported helpers (used in tests) ───────────────────────────────────── */
+export const validate = (fields) => {
+  const errors = {};
+  if (!fields.firstName.trim())  errors.firstName = "First name is required";
+  if (!fields.lastName.trim())   errors.lastName  = "Last name is required";
+  if (!fields.email.trim()) {
+    errors.email = "Email is required";
+  } else if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(fields.email)) {
+    errors.email = "Enter a valid email address";
+  }
+  if (!fields.password) {
+    errors.password = "Password is required";
+  } else if (fields.password.length < 8) {
+    errors.password = "Must be at least 8 characters";
+  }
+  if (!fields.confirmPassword) {
+    errors.confirmPassword = "Please confirm your password";
+  } else if (fields.password !== fields.confirmPassword) {
+    errors.confirmPassword = "Passwords do not match";
+  }
+  if (!fields.agreed) errors.agreed = "You must accept the terms";
+  return errors;
 };
 
-/** Fill every field with valid data. */
-const fillValidForm = async (user, s) => {
-  await user.type(s.firstName(),       "Jane");
-  await user.type(s.lastName(),        "Doe");
-  await user.type(s.email(),           "jane@example.com");
-  await user.type(s.password(),        "Secret@123");
-  await user.type(s.confirmPassword(), "Secret@123");
-  await user.click(s.agreed());
+export const getStrength = (pw) => {
+  if (!pw) return 0;
+  let s = 0;
+  if (pw.length >= 8)          s++;
+  if (/[A-Z]/.test(pw))        s++;
+  if (/[0-9]/.test(pw))        s++;
+  if (/[^A-Za-z0-9]/.test(pw)) s++;
+  return s;
 };
 
-// ─────────────────────────────────────────────────────────────────────────────
-// 1. UNIT — validate()
-// ─────────────────────────────────────────────────────────────────────────────
+/* ─── Eye icon ────────────────────────────────────────────────────────────── */
+const EyeIcon = ({ open }) => (
+  <svg width="18" height="18" viewBox="0 0 24 24" fill="none"
+    stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+    {open ? (
+      <>
+        <path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"/>
+        <circle cx="12" cy="12" r="3"/>
+      </>
+    ) : (
+      <>
+        <path d="M17.94 17.94A10.07 10.07 0 0112 20c-7 0-11-8-11-8a18.45 18.45 0 015.06-5.94"/>
+        <path d="M9.9 4.24A9.12 9.12 0 0112 4c7 0 11 8 11 8a18.5 18.5 0 01-2.16 3.19"/>
+        <line x1="1" y1="1" x2="23" y2="23"/>
+      </>
+    )}
+  </svg>
+);
 
-describe("validate() — unit tests", () => {
-  const base = {
-    firstName: "Jane", lastName: "Doe",
-    email: "jane@example.com",
-    password: "Secret@123", confirmPassword: "Secret@123",
-    agreed: true,
+const INITIAL_FIELDS = {
+  firstName: "", lastName: "", email: "",
+  password: "", confirmPassword: "", agreed: false,
+};
+
+/* ─── Main component ──────────────────────────────────────────────────────── */
+export default function RegistrationPage() {
+  const [fields,  setFields]  = useState(INITIAL_FIELDS);
+  const [errors,  setErrors]  = useState({});
+  const [showPw,  setShowPw]  = useState(false);
+  const [showCfm, setShowCfm] = useState(false);
+  const [loading, setLoading] = useState(false);
+  const [success, setSuccess] = useState(false);
+
+  const strength = getStrength(fields.password);
+
+  const set = (key, val) => {
+    setFields(f => ({ ...f, [key]: val }));
+    if (errors[key]) setErrors(e => ({ ...e, [key]: undefined }));
   };
 
-  test("returns empty object for fully valid input", () => {
-    expect(validate(base)).toEqual({});
-  });
+  const handleSubmit = async (e) => {
+    e.preventDefault();
+    const errs = validate(fields);
+    if (Object.keys(errs).length) { setErrors(errs); return; }
+    setLoading(true);
+    await new Promise(r => setTimeout(r, 1200));
+    setLoading(false);
+    setSuccess(true);
+  };
 
-  test("flags missing firstName", () => {
-    expect(validate({ ...base, firstName: "" })).toHaveProperty("firstName");
-  });
+  return (
+    <>
+      <style>{styles}</style>
+      <div className="rp-root">
+        <div className="rp-card" data-testid="rp-card">
+          {success ? (
+            <div className="rp-success" data-testid="success-message">
+              <div className="rp-success-icon">
+                <svg width="30" height="30" viewBox="0 0 24 24" fill="none"
+                  stroke="#2a7a4b" strokeWidth="2.5" strokeLinecap="round">
+                  <polyline points="20 6 9 17 4 12"/>
+                </svg>
+              </div>
+              <div className="rp-success-title">Welcome aboard!</div>
+              <p className="rp-success-body">
+                Your account has been created for <strong>{fields.email}</strong>.
+              </p>
+            </div>
+          ) : (
+            <>
+              <p className="rp-eyebrow">New account</p>
+              <h1 className="rp-title">Join us today.</h1>
+              <p className="rp-sub">Create your free account in seconds.</p>
 
-  test("flags firstName that is only whitespace", () => {
-    expect(validate({ ...base, firstName: "   " })).toHaveProperty("firstName");
-  });
+              <form onSubmit={handleSubmit} noValidate data-testid="reg-form">
+                <div className="rp-row">
+                  <div className="rp-field">
+                    <label htmlFor="firstName" className="rp-label">First Name</label>
+                    <input id="firstName" data-testid="input-firstName"
+                      className={`rp-input${errors.firstName ? " err" : ""}`}
+                      placeholder="Jane" value={fields.firstName}
+                      onChange={e => set("firstName", e.target.value)} />
+                    {errors.firstName && (
+                      <p className="rp-err-msg" data-testid="error-firstName">{errors.firstName}</p>
+                    )}
+                  </div>
+                  <div className="rp-field">
+                    <label htmlFor="lastName" className="rp-label">Last Name</label>
+                    <input id="lastName" data-testid="input-lastName"
+                      className={`rp-input${errors.lastName ? " err" : ""}`}
+                      placeholder="Doe" value={fields.lastName}
+                      onChange={e => set("lastName", e.target.value)} />
+                    {errors.lastName && (
+                      <p className="rp-err-msg" data-testid="error-lastName">{errors.lastName}</p>
+                    )}
+                  </div>
+                </div>
 
-  test("flags missing lastName", () => {
-    expect(validate({ ...base, lastName: "" })).toHaveProperty("lastName");
-  });
+                <div className="rp-field">
+                  <label htmlFor="email" className="rp-label">Email Address</label>
+                  <input id="email" type="email" data-testid="input-email"
+                    className={`rp-input${errors.email ? " err" : ""}`}
+                    placeholder="jane@example.com" value={fields.email}
+                    onChange={e => set("email", e.target.value)} />
+                  {errors.email && (
+                    <p className="rp-err-msg" data-testid="error-email">{errors.email}</p>
+                  )}
+                </div>
 
-  test("flags missing email", () => {
-    expect(validate({ ...base, email: "" })).toHaveProperty("email");
-  });
+                <div className="rp-field">
+                  <label htmlFor="password" className="rp-label">Password</label>
+                  <div className="rp-pw-wrap">
+                    <input id="password" type={showPw ? "text" : "password"}
+                      data-testid="input-password"
+                      className={`rp-input${errors.password ? " err" : ""}`}
+                      placeholder="Min. 8 characters" value={fields.password}
+                      onChange={e => set("password", e.target.value)} />
+                    <button type="button" className="rp-eye"
+                      data-testid="toggle-password"
+                      aria-label="Toggle password visibility"
+                      onClick={() => setShowPw(v => !v)}>
+                      <EyeIcon open={showPw} />
+                    </button>
+                  </div>
+                  {fields.password && (
+                    <div className="rp-strength" data-testid="strength-bar">
+                      {[1,2,3,4].map(i => (
+                        <div key={i}
+                          className={`rp-seg${strength >= i ? ` active-${strength}` : ""}`}
+                          data-testid={`strength-seg-${i}`} />
+                      ))}
+                    </div>
+                  )}
+                  {errors.password && (
+                    <p className="rp-err-msg" data-testid="error-password">{errors.password}</p>
+                  )}
+                </div>
 
-  test("flags malformed email — no @", () => {
-    const errs = validate({ ...base, email: "notanemail" });
-    expect(errs.email).toMatch(/valid email/i);
-  });
+                <div className="rp-field">
+                  <label htmlFor="confirmPassword" className="rp-label">Confirm Password</label>
+                  <div className="rp-pw-wrap">
+                    <input id="confirmPassword" type={showCfm ? "text" : "password"}
+                      data-testid="input-confirmPassword"
+                      className={`rp-input${errors.confirmPassword ? " err" : ""}`}
+                      placeholder="Re-enter password" value={fields.confirmPassword}
+                      onChange={e => set("confirmPassword", e.target.value)} />
+                    <button type="button" className="rp-eye"
+                      data-testid="toggle-confirm"
+                      aria-label="Toggle confirm password visibility"
+                      onClick={() => setShowCfm(v => !v)}>
+                      <EyeIcon open={showCfm} />
+                    </button>
+                  </div>
+                  {errors.confirmPassword && (
+                    <p className="rp-err-msg" data-testid="error-confirmPassword">{errors.confirmPassword}</p>
+                  )}
+                </div>
 
-  test("flags malformed email — no domain", () => {
-    const errs = validate({ ...base, email: "user@" });
-    expect(errs.email).toMatch(/valid email/i);
-  });
+                <div className="rp-terms-row">
+                  <input type="checkbox" id="agreed" data-testid="checkbox-agreed"
+                    className="rp-checkbox" checked={fields.agreed}
+                    onChange={e => set("agreed", e.target.checked)} />
+                  <label htmlFor="agreed" className="rp-terms-label">
+                    I agree to the <a href="#terms">Terms of Service</a> and{" "}
+                    <a href="#privacy">Privacy Policy</a>
+                  </label>
+                </div>
+                {errors.agreed && (
+                  <p className="rp-err-msg" style={{ marginBottom: 16 }}
+                    data-testid="error-agreed">{errors.agreed}</p>
+                )}
 
-  test("flags missing password", () => {
-    expect(validate({ ...base, password: "", confirmPassword: "" }))
-      .toHaveProperty("password");
-  });
+                <button type="submit" className="rp-btn"
+                  data-testid="submit-btn" disabled={loading}>
+                  {loading
+                    ? <><div className="spinner" /> Creating account…</>
+                    : "Create account"}
+                </button>
+              </form>
 
-  test("flags password shorter than 8 characters", () => {
-    const errs = validate({ ...base, password: "abc", confirmPassword: "abc" });
-    expect(errs.password).toMatch(/8 characters/i);
-  });
-
-  test("flags missing confirmPassword", () => {
-    expect(validate({ ...base, confirmPassword: "" }))
-      .toHaveProperty("confirmPassword");
-  });
-
-  test("flags mismatched passwords", () => {
-    const errs = validate({ ...base, confirmPassword: "Other@999" });
-    expect(errs.confirmPassword).toMatch(/do not match/i);
-  });
-
-  test("flags unchecked terms", () => {
-    expect(validate({ ...base, agreed: false })).toHaveProperty("agreed");
-  });
-
-  test("can return multiple errors simultaneously", () => {
-    const errs = validate({
-      firstName: "", lastName: "", email: "bad",
-      password: "", confirmPassword: "", agreed: false,
-    });
-    expect(Object.keys(errs).length).toBeGreaterThan(3);
-  });
-});
-
-// ─────────────────────────────────────────────────────────────────────────────
-// 2. UNIT — getStrength()
-// ─────────────────────────────────────────────────────────────────────────────
-
-describe("getStrength() — unit tests", () => {
-  test("returns 0 for empty string", () => {
-    expect(getStrength("")).toBe(0);
-  });
-
-  test("returns 1 for a long lowercase-only password", () => {
-    expect(getStrength("abcdefgh")).toBe(1); // length ✓ only
-  });
-
-  test("returns 2 for length + uppercase", () => {
-    expect(getStrength("Abcdefgh")).toBe(2);
-  });
-
-  test("returns 3 for length + uppercase + digit", () => {
-    expect(getStrength("Abcdefg1")).toBe(3);
-  });
-
-  test("returns 4 for all criteria (length + upper + digit + symbol)", () => {
-    expect(getStrength("Secret@1")).toBe(4);
-  });
-
-  test("short password with all character types scores only what length allows", () => {
-    // "A1!" is only 3 chars — fails length check (score 0 for length) → max 3
-    expect(getStrength("A1!")).toBe(3);
-  });
-});
-
-// ─────────────────────────────────────────────────────────────────────────────
-// 3. RENDERING
-// ─────────────────────────────────────────────────────────────────────────────
-
-describe("Rendering", () => {
-  test("renders the registration form", () => {
-    setup();
-    expect(screen.getByTestId("reg-form")).toBeInTheDocument();
-  });
-
-  test("renders all six input controls", () => {
-    const s = setup();
-    expect(s.firstName()).toBeInTheDocument();
-    expect(s.lastName()).toBeInTheDocument();
-    expect(s.email()).toBeInTheDocument();
-    expect(s.password()).toBeInTheDocument();
-    expect(s.confirmPassword()).toBeInTheDocument();
-    expect(s.agreed()).toBeInTheDocument();
-  });
-
-  test("submit button is present and enabled by default", () => {
-    const s = setup();
-    expect(s.submitBtn()).toBeInTheDocument();
-    expect(s.submitBtn()).not.toBeDisabled();
-  });
-
-  test("renders the page heading", () => {
-    setup();
-    expect(screen.getByText(/join us today/i)).toBeInTheDocument();
-  });
-
-  test("does not show success screen on initial render", () => {
-    setup();
-    expect(screen.queryByTestId("success-message")).not.toBeInTheDocument();
-  });
-
-  test("password and confirmPassword fields start as type=password", () => {
-    const s = setup();
-    expect(s.password()).toHaveAttribute("type", "password");
-    expect(s.confirmPassword()).toHaveAttribute("type", "password");
-  });
-
-  test("strength bar is hidden when password is empty", () => {
-    setup();
-    expect(screen.queryByTestId("strength-bar")).not.toBeInTheDocument();
-  });
-});
-
-// ─────────────────────────────────────────────────────────────────────────────
-// 4. VALIDATION — empty submit
-// ─────────────────────────────────────────────────────────────────────────────
-
-describe("Validation: empty form submit", () => {
-  test("shows error messages for all required fields", async () => {
-    const user = userEvent.setup();
-    const s = setup();
-    await user.click(s.submitBtn());
-
-    expect(screen.getByTestId("error-firstName")).toBeInTheDocument();
-    expect(screen.getByTestId("error-lastName")).toBeInTheDocument();
-    expect(screen.getByTestId("error-email")).toBeInTheDocument();
-    expect(screen.getByTestId("error-password")).toBeInTheDocument();
-    expect(screen.getByTestId("error-confirmPassword")).toBeInTheDocument();
-    expect(screen.getByTestId("error-agreed")).toBeInTheDocument();
-  });
-
-  test("does not show success screen when form is empty", async () => {
-    const user = userEvent.setup();
-    const s = setup();
-    await user.click(s.submitBtn());
-    expect(screen.queryByTestId("success-message")).not.toBeInTheDocument();
-  });
-});
-
-// ─────────────────────────────────────────────────────────────────────────────
-// 5. VALIDATION — individual field rules
-// ─────────────────────────────────────────────────────────────────────────────
-
-describe("Validation: individual fields", () => {
-  test("shows invalid-email error for badly formed email", async () => {
-    const user = userEvent.setup();
-    const s = setup();
-    await user.type(s.email(), "not-an-email");
-    await user.click(s.submitBtn());
-    expect(screen.getByTestId("error-email")).toHaveTextContent(/valid email/i);
-  });
-
-  test("shows error when password is under 8 characters", async () => {
-    const user = userEvent.setup();
-    const s = setup();
-    await user.type(s.password(), "short");
-    await user.click(s.submitBtn());
-    expect(screen.getByTestId("error-password")).toHaveTextContent(/8 characters/i);
-  });
-
-  test("shows error when passwords do not match", async () => {
-    const user = userEvent.setup();
-    const s = setup();
-    await user.type(s.password(), "Secret@123");
-    await user.type(s.confirmPassword(), "Different!9");
-    await user.click(s.submitBtn());
-    expect(screen.getByTestId("error-confirmPassword"))
-      .toHaveTextContent(/do not match/i);
-  });
-
-  test("shows terms error when checkbox is unchecked", async () => {
-    const user = userEvent.setup();
-    const s = setup();
-    await user.type(s.firstName(),       "Jane");
-    await user.type(s.lastName(),        "Doe");
-    await user.type(s.email(),           "jane@example.com");
-    await user.type(s.password(),        "Secret@123");
-    await user.type(s.confirmPassword(), "Secret@123");
-    // intentionally skip the checkbox
-    await user.click(s.submitBtn());
-    expect(screen.getByTestId("error-agreed")).toBeInTheDocument();
-  });
-
-  test("clears firstName error once user types a value", async () => {
-    const user = userEvent.setup();
-    const s = setup();
-    await user.click(s.submitBtn());
-    expect(screen.getByTestId("error-firstName")).toBeInTheDocument();
-    await user.type(s.firstName(), "J");
-    expect(screen.queryByTestId("error-firstName")).not.toBeInTheDocument();
-  });
-
-  test("clears email error once user corrects the value", async () => {
-    const user = userEvent.setup();
-    const s = setup();
-    await user.type(s.email(), "bad");
-    await user.click(s.submitBtn());
-    expect(screen.getByTestId("error-email")).toBeInTheDocument();
-    await user.clear(s.email());
-    await user.type(s.email(), "good@example.com");
-    expect(screen.queryByTestId("error-email")).not.toBeInTheDocument();
-  });
-});
-
-// ─────────────────────────────────────────────────────────────────────────────
-// 6. PASSWORD VISIBILITY TOGGLE
-// ─────────────────────────────────────────────────────────────────────────────
-
-describe("Password visibility toggle", () => {
-  test("clicking toggle-password switches type to text", async () => {
-    const user = userEvent.setup();
-    const s = setup();
-    await user.click(screen.getByTestId("toggle-password"));
-    expect(s.password()).toHaveAttribute("type", "text");
-  });
-
-  test("clicking toggle-password twice restores type to password", async () => {
-    const user = userEvent.setup();
-    const s = setup();
-    await user.click(screen.getByTestId("toggle-password"));
-    await user.click(screen.getByTestId("toggle-password"));
-    expect(s.password()).toHaveAttribute("type", "password");
-  });
-
-  test("clicking toggle-confirm switches confirmPassword type to text", async () => {
-    const user = userEvent.setup();
-    const s = setup();
-    await user.click(screen.getByTestId("toggle-confirm"));
-    expect(s.confirmPassword()).toHaveAttribute("type", "text");
-  });
-
-  test("toggling confirm does not affect the main password field", async () => {
-    const user = userEvent.setup();
-    const s = setup();
-    await user.click(screen.getByTestId("toggle-confirm"));
-    expect(s.password()).toHaveAttribute("type", "password");
-  });
-});
-
-// ─────────────────────────────────────────────────────────────────────────────
-// 7. PASSWORD STRENGTH INDICATOR
-// ─────────────────────────────────────────────────────────────────────────────
-
-describe("Password strength indicator", () => {
-  test("strength bar appears when user types in password field", async () => {
-    const user = userEvent.setup();
-    const s = setup();
-    await user.type(s.password(), "a");
-    expect(screen.getByTestId("strength-bar")).toBeInTheDocument();
-  });
-
-  test("renders exactly 4 strength segments", async () => {
-    const user = userEvent.setup();
-    const s = setup();
-    await user.type(s.password(), "abc");
-    for (let i = 1; i <= 4; i++) {
-      expect(screen.getByTestId(`strength-seg-${i}`)).toBeInTheDocument();
-    }
-  });
-
-  test("first segment is active for a weak password (strength = 1)", async () => {
-    const user = userEvent.setup();
-    const s = setup();
-    await user.type(s.password(), "abcdefgh"); // only length qualifies
-    expect(screen.getByTestId("strength-seg-1")).toHaveClass("active-1");
-    expect(screen.getByTestId("strength-seg-2")).not.toHaveClass(/active/);
-  });
-
-  test("all four segments active for a strong password (strength = 4)", async () => {
-    const user = userEvent.setup();
-    const s = setup();
-    await user.type(s.password(), "Secret@123"); // all 4 criteria
-    for (let i = 1; i <= 4; i++) {
-      expect(screen.getByTestId(`strength-seg-${i}`)).toHaveClass("active-4");
-    }
-  });
-});
-
-// ─────────────────────────────────────────────────────────────────────────────
-// 8. FORM SUBMISSION
-// ─────────────────────────────────────────────────────────────────────────────
-
-describe("Form submission", () => {
-  beforeEach(() => jest.useFakeTimers());
-  afterEach(()  => jest.useRealTimers());
-
-  test("submit button becomes disabled while loading", async () => {
-    const user = userEvent.setup({ advanceTimers: jest.advanceTimersByTime });
-    const s = setup();
-    await fillValidForm(user, s);
-    await user.click(s.submitBtn());
-    // button disabled immediately after click (before timer resolves)
-    expect(s.submitBtn()).toBeDisabled();
-    jest.runAllTimers();
-  });
-
-  test("shows success message after API call completes", async () => {
-    const user = userEvent.setup({ advanceTimers: jest.advanceTimersByTime });
-    const s = setup();
-    await fillValidForm(user, s);
-    await user.click(s.submitBtn());
-    jest.runAllTimers();
-    await waitFor(() =>
-      expect(screen.getByTestId("success-message")).toBeInTheDocument()
-    );
-  });
-
-  test("success message includes the submitted email", async () => {
-    const user = userEvent.setup({ advanceTimers: jest.advanceTimersByTime });
-    const s = setup();
-    await fillValidForm(user, s);
-    await user.click(s.submitBtn());
-    jest.runAllTimers();
-    await waitFor(() =>
-      expect(screen.getByTestId("success-message"))
-        .toHaveTextContent("jane@example.com")
-    );
-  });
-
-  test("registration form is removed after successful submission", async () => {
-    const user = userEvent.setup({ advanceTimers: jest.advanceTimersByTime });
-    const s = setup();
-    await fillValidForm(user, s);
-    await user.click(s.submitBtn());
-    jest.runAllTimers();
-    await waitFor(() =>
-      expect(screen.queryByTestId("reg-form")).not.toBeInTheDocument()
-    );
-  });
-});
-
-// ─────────────────────────────────────────────────────────────────────────────
-// 9. ACCESSIBILITY
-// ─────────────────────────────────────────────────────────────────────────────
-
-describe("Accessibility", () => {
-  test("all inputs are reachable via accessible labels (getByLabelText)", () => {
-    setup();
-    expect(screen.getByLabelText(/first name/i)).toBeInTheDocument();
-    expect(screen.getByLabelText(/last name/i)).toBeInTheDocument();
-    expect(screen.getByLabelText(/email address/i)).toBeInTheDocument();
-    expect(screen.getByLabelText(/^password$/i)).toBeInTheDocument();
-    expect(screen.getByLabelText(/confirm password/i)).toBeInTheDocument();
-  });
-
-  test("toggle password button has aria-label", () => {
-    setup();
-    expect(screen.getByTestId("toggle-password"))
-      .toHaveAttribute("aria-label");
-  });
-
-  test("toggle confirm button has aria-label", () => {
-    setup();
-    expect(screen.getByTestId("toggle-confirm"))
-      .toHaveAttribute("aria-label");
-  });
-
-  test("submit button has descriptive text content", () => {
-    const s = setup();
-    expect(s.submitBtn()).toHaveTextContent(/create account/i);
-  });
-});
+              <p className="rp-footer">
+                Already registered? <a href="#login">Sign in</a>
+              </p>
+            </>
+          )}
+        </div>
+      </div>
+    </>
+  );
+}
